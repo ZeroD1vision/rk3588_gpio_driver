@@ -1,0 +1,10 @@
+*.o
+*.ko
+*.mod.c
+*.mod
+*.symvers
+*.order
+.tmp_versions/
+.*.cmd
+.cache.mk
+tests/test_writev

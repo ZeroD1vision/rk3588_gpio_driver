@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": ["${workspaceFolder}/**",
+                "/usr/src/linux-headers-5.15.0-171-generic/include",
+                "/usr/src/linux-headers-5.15.0-171-generic/arch/x86/include",
+                "/usr/src/linux-headers-5.15.0-171-generic/arch/x86/include/generated",
+                "/usr/src/linux-headers-5.15.0-171-generic/include/uapi",
+                "/usr/src/linux-headers-5.15.0-171-generic/arch/x86/include/uapi"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}
