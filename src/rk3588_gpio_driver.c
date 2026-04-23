@@ -26,16 +26,18 @@
 #include <linux/uaccess.h>    // copy_from_user
 #include <linux/atomic.h>     // atomic_t, atomic_set и atomic_cmpxchg
 
+#include "gpio_common.h"
+
 
 /* ============================================================================
  * МАКРОСЫ И КОНСТАНТЫ
  * ============================================================================ */
 
 /** @brief Количество GPIO банков */
-#define GPIO_BANKS_COUNT 5
+#define GPIO_BANKS_COUNT GPIO_MAX_BANKS
 
 // Взяли все свободное, основываясь на https://www.kernel.org/doc/Documentation/userspace-api/ioctl/ioctl-number.rst
-#define RK3588_GPIO_MAGIC 'g'
+#define RK3588_GPIO_MAGIC GPIO_IOC_MAGIC
 
 /** @brief Установить направление GPIO (сырая версия) */
 #define RK3588_GPIO_SET_DIRECTION _IOW(RK3588_GPIO_MAGIC, 0x21, int)
@@ -43,14 +45,22 @@
 /** @brief Записать бит GPIO (сырая версия) */
 #define RK3588_GPIO_WRITE_BIT     _IOW(RK3588_GPIO_MAGIC, 0x22, int)
 
-/** @brief Прочитать бит GPIO */
-#define RK3588_GPIO_READ_BIT      _IOR(RK3588_GPIO_MAGIC, 0x23, int)
-
+/* UAPI ioctl (структурированный интерфейс) */
 /** @brief Установить направление GPIO (структурированная версия) */
-#define RK3588_GPIO_SET_DIRECTION_STRUCT _IOW(RK3588_GPIO_MAGIC, 0x24, struct rk3588_gpio_args)
-
+#define RK3588_GPIO_SET_DIRECTION_STRUCT GPIO_IOC_SET_DIRECTION
 /** @brief Записать бит GPIO (структурированная версия) */
-#define RK3588_GPIO_WRITE_BIT_STRUCT     _IOW(RK3588_GPIO_MAGIC, 0x25, struct rk3588_gpio_args)
+#define RK3588_GPIO_WRITE_BIT_STRUCT     GPIO_IOC_WRITE_BIT
+/** @brief Прочитать бит GPIO */
+#define RK3588_GPIO_READ_BIT             GPIO_IOC_READ_BIT
+
+// /** @brief Прочитать бит GPIO */
+// #define RK3588_GPIO_READ_BIT      _IOR(RK3588_GPIO_MAGIC, 0x23, int)
+
+// /** @brief Установить направление GPIO (структурированная версия) */
+// #define RK3588_GPIO_SET_DIRECTION_STRUCT _IOW(RK3588_GPIO_MAGIC, 0x24, struct rk3588_gpio_args)
+
+// /** @brief Записать бит GPIO (структурированная версия) */
+// #define RK3588_GPIO_WRITE_BIT_STRUCT     _IOW(RK3588_GPIO_MAGIC, 0x25, struct rk3588_gpio_args)
 
 /** @brief Для совместимости с сырым int */
 #define RK3588_GPIO_SET_DIRECTION_RAW    RK3588_GPIO_SET_DIRECTION
@@ -121,18 +131,6 @@ typedef struct {
 } rk3588_gpio_regs_t;
 
 /**
- * @struct rk3588_gpio_args
- * @brief Структура для передачи аргументов через ioctl
- *
- * Используется для структурированного интерфейса ioctl команд
- * (более безопасный способ передачи аргументов по сравнению с raw int).
- */
-struct rk3588_gpio_args {
-    int pin;    /**< Номер пина (0-31) */
-    int value;  /**< Значение (0 или 1 для данных, 0=вход/1=выход для направления) */
-};
-
-/**
  * @struct rk3588_gpio_bank_t
  * @brief Управляющая структура для банка GPIO
  *
@@ -168,6 +166,7 @@ static int rk3588_gpio_open(struct inode *inode, struct file *filp);
 static int rk3588_gpio_release(struct inode *inode, struct file *filp);
 static long rk3588_gpio_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 static int rk3588_setup_bank(int i);
+static int rk3588_validate_pin(int pin);
 
 /* ============================================================================
  * FILE_OPERATIONS
@@ -219,7 +218,7 @@ static struct class *g_class;
  */
 static int unpack_struct(unsigned long arg, int *pin, int *val)
 {
-    rk3588_gpio_args karg;
+    struct rk3588_gpio_args karg;
 
     if (copy_from_user(&karg, (void __user *)arg, sizeof(struct rk3588_gpio_args)))
         return -EFAULT;
@@ -248,6 +247,14 @@ static void unpack_raw(unsigned long arg, int *pin, int *val)
 
     *pin = data & 0x1F;
     *val = !!(data & 0x20);
+}
+
+static int rk3588_validate_pin(int pin)
+{
+    if (pin < 0 || pin >= GPIO_PINS_PER_BANK)
+        return -EINVAL;
+
+    return 0;
 }
 
 /* ============================================================================
@@ -428,12 +435,16 @@ static long rk3588_gpio_ioctl(struct file *filp, unsigned int cmd, unsigned long
     case RK3588_GPIO_SET_DIRECTION_STRUCT:
         if (unpack_struct(arg, &pin, &val))
             return -EFAULT;
+        if (rk3588_validate_pin(pin))
+            return -EINVAL;
         rk3588_hw_gpio_set_bit(bank, pin, val, false);
         break;
 
     case RK3588_GPIO_SET_DIRECTION_RAW:
         /* Для сырых команд проверка копирования не нужна */
         unpack_raw(arg, &pin, &val);
+        if (rk3588_validate_pin(pin))
+            return -EINVAL;
         rk3588_hw_gpio_set_bit(bank, pin, val, false);
         break;
 
@@ -441,11 +452,15 @@ static long rk3588_gpio_ioctl(struct file *filp, unsigned int cmd, unsigned long
     case RK3588_GPIO_WRITE_BIT_STRUCT:
         if (unpack_struct(arg, &pin, &val))
             return -EFAULT;
+        if (rk3588_validate_pin(pin))
+            return -EINVAL;
         rk3588_hw_gpio_set_bit(bank, pin, val, true);
         break;
 
     case RK3588_GPIO_WRITE_BIT_RAW:
         unpack_raw(arg, &pin, &val);
+        if (rk3588_validate_pin(pin))
+            return -EINVAL;
         rk3588_hw_gpio_set_bit(bank, pin, val, true);
         break;
 
@@ -453,6 +468,8 @@ static long rk3588_gpio_ioctl(struct file *filp, unsigned int cmd, unsigned long
     case RK3588_GPIO_READ_BIT:
         /* Для чтения нужен только номер пина */
         pin = (int)arg & 0x1F;
+        if (rk3588_validate_pin(pin))
+            return -EINVAL;
         return rk3588_hw_gpio_get_bit(bank, pin);
 
     default:
