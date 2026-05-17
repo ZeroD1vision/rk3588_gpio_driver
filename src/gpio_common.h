@@ -23,19 +23,19 @@
 
 /**
  * @struct rk3588_gpio_args
- * @brief Структура для передачи аргументов через ioctl
+ * @brief Универсальная структура для передачи аргументов через ioctl
  *
  * Используется для структурированного интерфейса ioctl команд
  * (более безопасный способ передачи аргументов по сравнению с raw int).
  */
-struct rk3588_gpio_args {
+struct gpio_ioctl_args {
     int pin;    /* 0-31 */
     int value;  /* Для данных: 0/1. Для направления: 0-вход, 1-выход */
 };
 
 /* Коды команд IOCTL */
-#define GPIO_IOC_SET_DIRECTION _IOW(GPIO_IOC_MAGIC, 0x24, struct rk3588_gpio_args)
-#define GPIO_IOC_WRITE_BIT     _IOW(GPIO_IOC_MAGIC, 0x25, struct rk3588_gpio_args)
+#define GPIO_IOC_SET_DIRECTION _IOW(GPIO_IOC_MAGIC, 0x24, struct gpio_ioctl_args)
+#define GPIO_IOC_WRITE_BIT     _IOW(GPIO_IOC_MAGIC, 0x25, struct gpio_ioctl_args)
 #define GPIO_IOC_READ_BIT      _IOR(GPIO_IOC_MAGIC, 0x23, int)
 
 #endif /* GPIO_COMMON_H */
