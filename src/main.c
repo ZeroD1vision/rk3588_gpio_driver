@@ -16,7 +16,7 @@
     printf("Detected board : %s\n", board->model_name);
     printf("Available banks: %d\n", board->bank_count);
 
-    // Логика работы прозрачна и не меняется от смены платформы
+    // Логика не меняется от смены платформы
     if (gpio_set_direction(1, 15, GPIO_DIR_OUTPUT) < 0) {
         fprintf(stderr, "Failed to set direction\n");
         gpio_close();
